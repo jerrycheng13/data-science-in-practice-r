@@ -1,0 +1,275 @@
+---
+title: "Homework 1 (R)"
+author: "Jinhan Cheng, jc4834@columbia.edu"
+date: "October 4, 2017"
+output: 
+    prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, eval = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+```
+```{r libraries,include=FALSE}
+library(prettydoc)
+library(data.table)
+library(plyr)
+library(dplyr)
+library(Hmisc)
+library(DT)
+library(scales)
+```
+```{r read file,include=FALSE}
+dat <- fread(input="Homework 1 Data -- 2017.csv")
+```
+
+## Answers to Question 1:Reading the Data
+* There are 2426922 rows
+```{r num_rows}
+nrow(x = dat)
+```
+
+* There are 13 columns
+```{r num_columns}
+ncol(x = dat)
+```
+
+* There are 1000 unique patients
+```{r num_unique_patients}
+dat[,length(unique(id))]
+```
+* The names of the columns are:
+"**id**","**begin**","**end**","**age**",
+"**diabetes**","**hypertension**","**kidney_disease**",
+"**ace**","**beta.blocker**","**statin**",
+"**hospital**","**heart.attack**","**death**"
+
+* They match up with our description of the data set.
+```{r colnames}
+colnames(dat)
+```
+
+## Answers to Question 2:Inspection and Cleaning
+* First we shall look at the types of the data by looking at the structure, it's easy to find that the types of the variables "**beta.blocker**" and "**statin**" are both "**chr**". We should convert them into numeric type.
+```{r check_type}
+str(dat)
+```
+
+* Checking begin
+```{r check_begin}
+
+```
+
+* Checking end
+```{r check_end}
+
+```
+
+* Checking age
+```{r check_age}
+
+```
+
+* Checking diabetes
+```{r check_diabetes}
+
+```
+
+* Checking kidney_disease
+```{r check_kidney_disease}
+
+```
+
+* Checking ace
+```{r check_ace}
+
+```
+
+* Checking beta.blocker
+```{r check_beta_blocker}
+dat[,table(beta.blocker)]
+dat[,`:=`(beta.blocker,as.numeric(as.character(beta.blocker)))]
+dat[,table(beta.blocker)]
+```
+
+* Checking statin
+```{r check_statin}
+dat[,table(statin)]
+dat[,`:=`(statin,as.numeric(as.character(statin)))]
+dat[,table(statin)]
+```
+
+* Checking hospital
+```{r check_hospital}
+
+```
+
+* Checking heart.attack
+```{r check_heart_attack}
+
+```
+
+* Checking death
+```{r check_death}
+
+```
+
+## Answers to Question 3:Patient-Level Summaries
+* The summaries at baseline for these variables are as followed:
+```{r mean_clinical_factors}
+baseline_dat <- dat[begin==0, ]
+a_age <- baseline_dat[,round(mean(age),digits=1)]
+a_diabetes <- baseline_dat[,percent(round(mean(diabetes),digits=3))] 
+a_hypertension <- baseline_dat[,percent(round(mean(hypertension),digits=3))] 
+a_kidney_disease <- baseline_dat[,percent(round(mean(kidney_disease),digits=3))] 
+sd_age <- baseline_dat[,round(sd(age),digits=1)]
+sd_diabetes <- baseline_dat[,round(sd(diabetes),digits=1)]
+sd_hypertension <- baseline_dat[,round(sd(hypertension),digits=1)]
+sa_kidney_disease <- baseline_dat[,round(sd(kidney_disease),digits=1)]
+baseline_dat_summary <-  data.frame(variable=c("age","diabetes","hypertension","kidney disease"), average_value=c(a_age,a_diabetes,a_hypertension,a_kidney_disease), standard_deviation=c(sd_age,sd_diabetes,sd_hypertension,sa_kidney_disease)
+)
+datatable(baseline_dat_summary)
+```
+
+## Answers to Question 4:Counting Outcomes
+* There are 49642 trips to hospital, 3262 heart attacks and 6086 deaths occurred in follow up.
+```{r outcome.counts}
+dat[,sum(hospital)]
+dat[,sum(heart.attack)]
+dat[,sum(death)]
+```
+
+## Answers to Question 5:Counting Outcomes by Medication Usage
+* The results are as followed:
+```{r split.outcome.counts}
+Outcome_counts <- data.frame(Outcome=c("death","heart attack","hospitalization"), 
+ACE_taken=c(length(which(dat[death==1,ace]==1)),length(which(dat[heart.attack==1,ace]==1)),length(which(dat[hospital==1,ace]==1))), ACE_n_taken=c(length(which(dat[death==1,ace]==0)),length(which(dat[heart.attack==1,ace]==0)),length(which(dat[hospital==1,ace]==0))), 
+Beta_taken=c(length(which(dat[death==1,beta.blocker]==1)),length(which(dat[heart.attack==1,beta.blocker]==1)),length(which(dat[hospital==1,beta.blocker]==1))), Beta_n_taken=c(length(which(dat[death==1,beta.blocker]==0)),length(which(dat[heart.attack==1,beta.blocker]==0)),length(which(dat[hospital==1,beta.blocker]==0))), 
+Statins_taken=c(length(which(dat[death==1,statin]==1)),length(which(dat[heart.attack==1,statin]==1)),length(which(dat[hospital==1,statin]==1))), Statins_n_taken=c(length(which(dat[death==1,statin]==0)),length(which(dat[heart.attack==1,statin]==0)),length(which(dat[hospital==1,statin]==0)))
+)
+datatable(Outcome_counts)
+```
+
+## Answers to Question 6:Follow up
+* There are a total of 37044.5 person-years
+* The average number of years of observation per patient is 3.7 years
+```{r obsercation}
+ob_d <- dat[,sum(end-begin)]
+ob_y <- round(ob_d/365.25, digits=1)
+ob_y
+average_ob_y <- round(ob_y/dat[,length(unique(id))], digits=1)
+average_ob_y
+```
+
+## Answers to Question 7:Utilization
+* Patients spent 26958.5 years on ACE Inhibitors, 21633.6 years on Beta Blockers and 28860.3 years on Statins.
+* Patients spent 10085.9 years off of ACE Inhibitors, 14276.2 years off of Beta Blockers and 8171.1 years off of Statins.
+* There are 0 years missing from the observation of ACE Inhibitors, 1134.6 years missing from the observation of Beta Blockers and 13.1 years missing from the observation of Statins.
+```{r utilization}
+round(dat[ace==1,sum(end-begin)]/365.25,digits=1)
+round(dat[beta.blocker==1,sum(end-begin)]/365.25,digits=1)
+round(dat[statin==1,sum(end-begin)]/365.25,digits=1)
+round(dat[ace==0,sum(end-begin)]/365.25,digits=1)
+round(dat[beta.blocker==0,sum(end-begin)]/365.25,digits=1)
+round(dat[statin==0,sum(end-begin)]/365.25,digits=1)
+round(dat[,sum(end-begin)]/365.25-dat[ace==1,sum(end-begin)]/365.25-dat[ace==0,sum(end-begin)]/365.25,digits=1)
+round(dat[,sum(end-begin)]/365.25-dat[beta.blocker==1,sum(end-begin)]/365.25-dat[beta.blocker==0,sum(end-begin)]/365.25,digits=1)
+round(dat[,sum(end-begin)]/365.25-dat[statin==1,sum(end-begin)]/365.25-dat[statin==0,sum(end-begin)]/365.25,digits=1)
+```
+
+## Answers to Question 8:Crude Event Rates
+* the crude rate of hospitalization is 134
+* the crude rate of heart attacks is 8.8
+* the crude rate of death is 16.4
+```{r crude_rates}
+cr_hospitalization <- round(100*dat[,sum(hospital)]/(ob_d/365.25),digits=1)
+cr_hospitalization
+cr_heart_attacks <- round(100*dat[,sum(heart.attack)]/(ob_d/365.25),digits=1)
+cr_heart_attacks
+cr_death <- round(100*dat[,sum(death)]/(ob_d/365.25),digits=1)
+cr_death
+cr<-data.frame(Variable=c("hospitalization","heart attacks","death"),Crude_rate=c(cr_hospitalization,cr_heart_attacks,cr_death)
+)
+datatable(cr)
+```
+
+## Answers to Question 9:Crude Event Rates By Medication Usage
+* The results are shown in the table below
+
+* ACE Inhibitors
+```{r crude.rate.ace}
+cr_hospitalization_ace_t <- round(100*dat[ace==1,sum(hospital)]/(dat[ace==1,sum(end-begin)]/365.25),digits=1)
+cr_hospitalization_ace_n_t <- round(100*dat[ace==0,sum(hospital)]/(dat[ace==0,sum(end-begin)]/365.25),digits=1)
+cr_heart_attacks_ace_t <- round(100*dat[ace==1,sum(heart.attack)]/(dat[ace==1,sum(end-begin)]/365.25),digits=1)
+cr_heart_attacks_ace_n_t <- round(100*dat[ace==0,sum(heart.attack)]/(dat[ace==0,sum(end-begin)]/365.25),digits=1)
+cr_death_ace_t <- round(100*dat[ace==1,sum(death)]/(dat[ace==1,sum(end-begin)]/365.25),digits=1)
+cr_death_ace_n_t <- round(100*dat[ace==0,sum(death)]/(dat[ace==0,sum(end-begin)]/365.25),digits=1)
+cr_ace <- data.frame(
+Variable=c("events of hospitalization","events of heart attacks","events of death","crude rate of hospitalization","crude rate of heart attacks","crude rate of death"),
+ACE_taken=c(dat[ace==1,sum(hospital)],dat[ace==1,sum(heart.attack)],dat[ace==1,sum(death)],cr_hospitalization_ace_t,cr_heart_attacks_ace_t,cr_death_ace_t),
+ACE_n_taken=c(dat[ace==0,sum(hospital)],dat[ace==0,sum(heart.attack)],dat[ace==0,sum(death)],cr_hospitalization_ace_n_t,cr_heart_attacks_ace_n_t,cr_death_ace_n_t)
+)
+datatable(cr_ace)
+```
+
+* Beta Blockers
+```{r crude.rates.beta.blocker}
+cr_hospitalization_beta_t <- round(100*dat[beta.blocker==1,sum(hospital)]/(dat[beta.blocker==1,sum(end-begin)]/365.25),digits=1)
+cr_hospitalization_beta_n_t <- round(100*dat[beta.blocker==0,sum(hospital)]/(dat[beta.blocker==0,sum(end-begin)]/365.25),digits=1)
+cr_heart_attacks_beta_t <- round(100*dat[beta.blocker==1,sum(heart.attack)]/(dat[beta.blocker==1,sum(end-begin)]/365.25),digits=1)
+cr_heart_attacks_beta_n_t <- round(100*dat[beta.blocker==0,sum(heart.attack)]/(dat[beta.blocker==0,sum(end-begin)]/365.25),digits=1)
+cr_death_beta_t <- round(100*dat[beta.blocker==1,sum(death)]/(dat[beta.blocker==1,sum(end-begin)]/365.25),digits=1)
+cr_death_beta_n_t <- round(100*dat[beta.blocker==0,sum(death)]/(dat[beta.blocker==0,sum(end-begin)]/365.25),digits=1)
+cr_beta <- data.frame(
+Variable=c("events of hospitalization","events of heart attacks","events of death","crude rate of hospitalization","crude rate of heart attacks","crude rate of death"),
+BETA_taken=c(dat[beta.blocker==1,sum(hospital)],dat[beta.blocker==1,sum(heart.attack)],dat[beta.blocker==1,sum(death)],cr_hospitalization_beta_t,cr_heart_attacks_beta_t,cr_death_beta_t),
+BETA_n_taken=c(dat[beta.blocker==0,sum(hospital)],dat[beta.blocker==0,sum(heart.attack)],dat[beta.blocker==0,sum(death)],cr_hospitalization_beta_n_t,cr_heart_attacks_beta_n_t,cr_death_beta_n_t)
+)
+datatable(cr_beta)
+```
+
+* Statins
+```{r crude.rates.statin}
+cr_hospitalization_statin_t <- round(100*dat[statin==1,sum(hospital)]/(dat[statin==1,sum(end-begin)]/365.25),digits=1)
+cr_hospitalization_statin_n_t <- round(100*dat[statin==0,sum(hospital)]/(dat[statin==1,sum(end-begin)]/365.25),digits=1)
+cr_heart_attacks_statin_t <- round(100*dat[statin==1,sum(heart.attack)]/(dat[statin==1,sum(end-begin)]/365.25),digits=1)
+cr_heart_attacks_statin_n_t <- round(100*dat[statin==0,sum(heart.attack)]/(dat[statin==0,sum(end-begin)]/365.25),digits=1)
+cr_death_statin_t <- round(100*dat[statin==1,sum(death)]/(dat[statin==1,sum(end-begin)]/365.25),digits=1)
+cr_death_statin_n_t <- round(100*dat[statin==0,sum(death)]/(dat[statin==0,sum(end-begin)]/365.25),digits=1)
+cr_statin <- data.frame(
+Variable=c("events of hospitalization","events of heart attacks","events of death","crude rate of hospitalization","crude rate of heart attacks","crude rate of death"),
+Statin_taken=c(dat[statin==1,sum(hospital)],dat[statin==1,sum(heart.attack)],dat[statin==1,sum(death)],cr_hospitalization_statin_t,cr_heart_attacks_statin_t,cr_death_statin_t),
+Statin_n_taken=c(dat[statin==0,sum(hospital)],dat[statin==0,sum(heart.attack)],dat[statin==0,sum(death)],cr_hospitalization_statin_n_t,cr_heart_attacks_statin_n_t,cr_death_statin_n_t)
+)
+datatable(cr_statin)
+```
+
+## Answers to Question 10:Unadjusted Odds Ratios
+* As for ACE Inhibitors:
+```{r unadjusted.odds.ratio.ace}
+uor_ace <- data.frame(
+Variable=c("hospitalization","heart attacks","death"),
+Unadjusted_odds_ratio=c(round(cr_hospitalization_ace_t/cr_hospitalization_ace_n_t,digits=2),round(cr_heart_attacks_ace_t/cr_heart_attacks_ace_n_t,digits=2),round(cr_death_ace_t/cr_death_ace_n_t,digits=2))
+)
+datatable(uor_ace)
+```
+
+* As for Beta Blockers:
+```{r unadjusted.odds.ratio.beta.blocker}
+uor_beta <- data.frame(
+Variable=c("hospitalization","heart attacks","death"),
+Unadjusted_odds_ratio=c(round(cr_hospitalization_beta_t/cr_hospitalization_beta_n_t,digits=2),round(cr_heart_attacks_beta_t/cr_heart_attacks_beta_n_t,digits=2),round(cr_death_beta_t/cr_death_beta_n_t,digits=2))
+)
+datatable(uor_beta)
+```
+
+* As for Statins:
+```{r unadjusted.odds.ratio.statin}
+uor_statin <- data.frame(
+Variable=c("hospitalization","heart attacks","death"),
+Unadjusted_odds_ratio=c(round(cr_hospitalization_statin_t/cr_hospitalization_statin_n_t,digits=2),round(cr_heart_attacks_statin_t/cr_heart_attacks_statin_n_t,digits=2),round(cr_death_statin_t/cr_death_statin_n_t,digits=2))
+)
+datatable(uor_statin)
+```

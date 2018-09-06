@@ -1,0 +1,432 @@
+---
+title: "Homework 4"
+author: "Jinhan Cheng (jc4834@columbia.edu)"
+date: "November 14th, 2017"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, eval = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+
+```
+
+```{r libraries,include=FALSE}
+library(prettydoc)
+library(data.table)
+library(plyr)
+library(dplyr)
+library(Hmisc)
+library(DT)
+library(noncensus)
+```
+
+```{r read_data_intro, echo=FALSE}
+library(data.table)
+dat <- fread(input = "Homework 4 Data -- 2017.csv", verbose = FALSE)
+num.lines <- 20
+question.counter = 0
+```
+
+```{r functions, echo=FALSE}
+
+percent <- function(x, digits, format = "f", ...){
+  paste(format(100 * x, format = format, digits = digits, ...), "%", sep = "")
+}
+
+percentage.table <- function(x, digits = 1){
+  tab <- table(x)
+  percentage.tab <- 100*tab/(sum(tab))
+  rounded.tab <- round(x = percentage.tab, digits = digits)
+  return(rounded.tab)
+}
+
+round.numerics <- function(x,digits){
+  if(is.numeric(x)){
+    x <- round(x = x, digits = digits)
+  }
+  return(x)
+}
+
+round.numerics.mean <- function(x,digits) {
+    return(round.numerics(mean(x, na.rm=TRUE),digits))
+}
+
+mean.na.rm <- function(x) {
+    return(mean(x, na.rm=TRUE))
+}
+
+# Dynamic Formulas
+reduce.formula <- function(dat, the.initial.formula) {
+    dat <- as.data.table(dat)
+    
+    the.sides <- strsplit(x = the.initial.formula, split = "~")[[1]]      
+    the.pieces.untrimmed <- strsplit(x = the.sides[2], split = "+", fixed = TRUE)[[1]]
+    the.pieces <- trimws(x = the.pieces.untrimmed, which = "both") 
+    num.variables <- length(the.pieces)
+    include.pieces <- logical(num.variables)
+    
+    for (i in 1:num.variables) {
+        unique.values <- dat[, unique(get(the.pieces[i]))] 
+        if (length(unique.values) < 2) {
+            include.pieces[i] <- FALSE 
+        } else {
+            include.pieces[i] <- TRUE }
+        }
+    rhs <- paste(the.pieces[include.pieces == TRUE], collapse = " + ") 
+    the.formula <- sprintf("%s ~ %s", trimws(x = the.sides[1]), rhs) 
+    return(the.formula)
+}
+
+# Logistic Regression Summary
+logistic.regression.summary <- function(glm.mod, digits = 3) {
+  glm.coefs <- as.data.table(summary(glm.mod)$coefficients, keep.rownames = TRUE) 
+  alpha = 0.05
+  z <- qnorm(p = 1 - alpha/2, mean = 0, sd = 1)
+  glm.coefs[, `:=`(Odds.Ratio, exp(Estimate))]
+  glm.coefs[, `:=`(OR.Lower.95, exp(Estimate - z * `Std. Error`))] 
+  glm.coefs[, `:=`(OR.Upper.95, exp(Estimate + z * `Std. Error`))] 
+  setnames(x = glm.coefs, old = c("rn", "Pr(>|z|)"), new = c("Variable", 
+    "p.value"))
+  setcolorder(x = glm.coefs, neworder = c("Variable", "Estimate", 
+    "Odds.Ratio", "OR.Lower.95", "OR.Upper.95", "p.value", "Std. Error", "z value"))
+  return(glm.coefs[])
+}
+
+# Linear Regression Summary
+linear.regression.summary <- function(lm.mod, digits = 3) { 
+  lm.coefs <- as.data.table(summary(lm.mod)$coefficients, keep.rownames = TRUE) 
+  alpha = 0.05
+  z <- qnorm(p = 1 - alpha/2, mean = 0, sd = 1)
+  lm.coefs[, `:=`(Coef.Lower.95, Estimate - z * `Std. Error`)] 
+  lm.coefs[, `:=`(Coef.Upper.95, Estimate + z * `Std. Error`)] 
+  setnames(x = lm.coefs, old = c("rn", "Pr(>|t|)"), new = c("Variable", 
+    "p.value"))
+  setcolorder(x = lm.coefs, neworder = c("Variable", "Estimate", "Coef.Lower.95", 
+    "Coef.Upper.95", "p.value", "Std. Error", "t value"))
+  return(lm.coefs)
+}
+
+# Model Fitting Function
+fit.model <- function(dat, the.initial.formula, model.type, digits = 3) {
+    the.formula <- reduce.formula(dat = dat, the.initial.formula = the.initial.formula)
+    if (model.type == "logistic") {
+        mod <- glm(formula = the.formula, family = "binomial", data = dat)
+        mod.summary <- logistic.regression.summary(glm.mod = mod, digits = digits)
+    }
+    if (model.type == "linear") {
+        mod <- lm(formula = the.formula, data = dat) 
+        mod.summary <- linear.regression.summary(lm.mod = mod, digits = digits)
+    }
+    mod.summary.rounded <- mod.summary[, lapply(X = .SD, FUN = "round.numerics", digits = digits)] 
+    return(mod.summary.rounded)
+}
+
+# Awareness Model
+awareness.model <- function(dat) {
+    the.initial.formula <- "Awareness ~ age.group + gender + income.group + region + persona + Aggregated.Engagement" 
+    res <- fit.model(dat = dat, the.initial.formula = the.initial.formula,
+        model.type = "logistic") 
+    return(res)
+}
+
+# Satisfaction Model
+satisfaction.model <- function(dat) {
+    the.initial.formula <- "Satisfaction ~ age.group + gender + income.group + region + persona + Aggregated.Engagement"
+    res <- fit.model(dat = dat, the.initial.formula = the.initial.formula,
+        model.type = "linear") 
+    return(res)
+}
+```
+
+```{r question1, echo=FALSE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`: Respondent Variables
+
+**a.** Firstly, because we know that each respondent may appear multiple times in the data set. We find that the number of unique id is 10000, which is equal to the times that **Smartophonic** appears in the column of **Product**, and it means that we could compute the percentages of the groups simply by analyzing the situation of only one product.
+
+```{r check}
+length(dat[,unique(id)])
+length(which(dat$Product=='Smartophonic'))
+```
+
+- **Age Group**: The percentages are as followed.
+   
+```{r age_group}
+dat[, age.group := cut2(x = age, cuts = c(18, 35, 50, 65, 120))]
+percentage.table(dat[Product=='Smartophonic', age.group])
+```
+
+- **Gender**: The percentages are as followed.
+
+```{r gender}
+percentage.table(dat[Product=='Smartophonic',gender])
+```
+
+- **Income Group**: The percentages are as followed.
+
+```{r income_group}
+dat[, income.group := cut2(x = income, cuts = 1000* c(0, 50, 75, 100, 150, 250))]
+percentage.table(dat[Product=='Smartophonic', income.group])
+```
+
+- **Region**: The percentages are as followed.
+
+```{r region}
+percentage.table(dat[Product=='Smartophonic',region])
+```
+ 
+- **Persona**: The percentages are as followed.
+
+```{r persona}
+percentage.table(dat[Product=='Smartophonic',persona])
+```
+
+**b.** Now create a visual display of this information.  Allow the user to select which variable to explore.  Then create a graph that depicts the percentages of respondents in each category for that variable.
+
+```{r engine_q1, echo=FALSE}
+print("Please see the reporting engine for this solution.")
+```
+
+
+```{r question2, echo=FALSE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Segmented Outcomes
+
+**a.** The top 5 products by Awareness rates in the Northeast are **Pocket Dialz**, **Phonatics**, **Triumphone**, **Phone Zone** and **Maybe Mobile**.
+
+```{r awareness_northeast_top5}
+Awareness_Northeast <- dat[region=='Northeast', .(Rates=round.numerics.mean(Awareness,3)), by=Product]
+setorder(Awareness_Northeast,-Rates)
+Awareness_Northeast$Rates <- percent(Awareness_Northeast$Rates, 3)
+datatable(Awareness_Northeast[1:5])
+```
+
+**b.** The top 5 products by Advocacy rates among females who earn at least $100,000 are **Off the Hook**, **Maybe Mobile**, **MobilitEE**, **App Map** and **Mobile Mayhem**.
+
+```{r advocacy_females_100kplus_top5}
+Advocacy_Females_100kplus <- dat[gender=='Female' & income>=100000, .(Rates=round.numerics.mean(Advocacy,3)), by=Product]
+setorder(Advocacy_Females_100kplus, -Rates)
+Advocacy_Females_100kplus$Rates <-percent(Advocacy_Females_100kplus$Rates, 3)
+datatable(Advocacy_Females_100kplus[1:5])
+```
+
+**c.** Now create a dynamic, visual display ranking the products by their outcomes.  The user will make the following selections:
+
+State of engagement:  Only a single state may be selected at once.
+
+Other variables:  Age Group, Gender, Income Group, Region, Persona
+
+Then, for all of the other variables, any combination of categories may be selected, so long as at least one category from each variable is chosen.  For instance, for Gender, the user may select Male only, Female only, or both Male and Female.
+
+Then, the user should be able to select how many products to display.  Once a number is selected, the outcome rates should be graphically displayed in sorted decreasing order for the top products in the selected subgroups.  If 5 is selected for Awareness, then the 5 products with the highest rates of Awareness for the specified subgroup will be depicted.  Make sure to include the percentages in the graph, each rounded to 1 decimal place (e.g. 84.2%).
+
+```{r engine_q2, echo=FALSE}
+print("Please see the reporting engine for this solution.")
+```
+
+
+```{r question3, echo=FALSE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Overall Brand Perceptions
+
+**a.** We see **Boring**, **Bulky**, **Fragile**, **Expensive** as negative perceptions and do conversion for them;
+
+The top 5 brands by the overall average perception are **MobilitEE**, **Pocket Dialz**, **Speed Dials**, **Triumphone** and **Mobile Mayhem**.
+
+
+```{r overall_average_perception}
+#step1:
+bp.traits <- names(dat)[grep(pattern = "BP_", x = names(dat))]
+bp_mean <- dat[, lapply(X = .SD, FUN = "mean.na.rm"), .SDcols =bp.traits, by=Product]
+#step2:
+BP.name.cleanup <- function(x, removal.characters = c("BP", "0", "1")) {
+  for (i in 1:length(x)) {
+    x[i] <- gsub(pattern = "_", replacement = "", x = x[i], fixed = TRUE)
+    for (j in 1:length(removal.characters)) {
+      x[i] <- gsub(pattern = removal.characters[j], replacement = "", x = x[i], fixed = TRUE)
+    } 
+  }
+  return(x) 
+}
+new.bp.traits <- BP.name.cleanup(x = bp.traits)
+negative.traits <- c("Boring","Bulky","Fragile","Expensive")
+for (i in 1:length(new.bp.traits))
+  {if( new.bp.traits[i] %in% negative.traits )
+  {bp_mean[,i+1] <- 10-bp_mean[,i+1,with=FALSE]}
+}
+#step3:
+bp_mean[,`:=`("Overall Average Perception", round(rowMeans(bp_mean[,2:ncol(bp_mean)],na.rm = TRUE), digits=1))]
+scores <- bp_mean[,c("Product","Overall Average Perception")]
+#Step4:
+setorder(bp_mean,-"Overall Average Perception")
+#step5:
+datatable(bp_mean[1:5,c("Product","Overall Average Perception")])
+```
+
+**b.** Now create a dynamic, graphical display that allows the user to perform this calculation in selected subgroups.  Much like the previous question, the user may make any combination of selections in the following variables, provided that at least one category of each variable is selected:  Age Group, Gender, Income Group, Region, Persona.
+
+Also allow the user to select how many brands should be displayed, with the top k brands depicted in decreasing sorted order.  All results should display the overall average perception for the brand, rounded to 1 decimal place (e.g. 6.1).  
+
+```{r engine_q3, echo=FALSE}
+print("Please see the reporting engine for this solution.")
+```
+
+
+```{r question4, echo=FALSE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`: Outcomes Gaps
+
+**a.**  These 5 products have the largest gap between the rate of consumption and the rate of awareness: **All Buttons**, **Ring Ring**, **App Map**, **No Buttons** and **Buzzdial**.  
+
+```{r comsumption_awareness_gaps_top5}
+gap_consumption_awareness <- dat[,.(Gap=round.numerics(mean.na.rm(Consumption)-mean.na.rm(Awareness),3)),by=Product]
+setorderv(x=gap_consumption_awareness,cols="Gap",order=-1,na.last = TRUE)
+gap_consumption_awareness$Gap <- percent(gap_consumption_awareness$Gap, 3)
+datatable(gap_consumption_awareness[1:5,])
+```
+
+**b.**  These 5 products have the largest gap between the rate of awareness and the average Satisfaction (in percentage terms): **Pocket Dialz**, **Mobzilla**, **Maybe Mobile**, **Phone Zone** and **Smartophonic**.
+
+```{r awareness_satisfaction_gaps_top5}
+gap_awareness_satisfaction <- dat[,.(Gap=round.numerics(mean.na.rm(Awareness)-0.1*mean.na.rm(Satisfaction),3)),by=Product]
+setorderv(x=gap_awareness_satisfaction,cols="Gap",order=-1,na.last = TRUE)
+gap_awareness_satisfaction$Gap <- percent(gap_awareness_satisfaction$Gap, 3)
+datatable(gap_awareness_satisfaction[1:5,])
+```
+
+**c.** Now create a dynamic, graphical display that ranks the products in terms of the difference in averages between any two selected outcomes.  The user will be allowed to make the following selections:
+
+**First Outcome**:  One of the outcome variables.
+
+**Second Outcome**:  Another outcome variable.  In practice, it would be nice to exclude the outcome that was selected first.  In practice, that requires some additional programming tools.  So it's OK to select the same variable twice.  In that case, all of the products should necessarily show a difference of zero.
+
+The difference in rates will be Difference = Average First Outcome - Average Second Outcome per product.
+
+**Number of Top Products**:  The user will select how many products to display.
+
+**Display Percentages**:  If checked, the bargraph will display the percentages for each product.
+
+**Digits**:  How many digits should the percentages be rounded to?  1 digit would be a number like 84.2%.
+
+```{r engine_q4, echo=FALSE}
+print("Please see the reporting engine for this solution.")
+```
+
+
+```{r question5, echo=FALSE}
+question.counter <- question.counter + 1
+```
+
+## Question `r question.counter`: Cross-Product Measures
+
+**a.**  : For the impact on Brand **Buzzdial**'s Awareness:
+
+* Each unit of age.group[35,50) is associated with approximately 27.1% lower odds of awareness;
+
+* Each unit of age.group[50,65) is associated with approximately 23.9% lower odds of awareness;
+
+* Each unit of age.group[65,120] is associated with approximately 9.4% higher odds of awareness;
+
+* Each unit of genderMale is associated with approximately 121.0% higher odds of awareness;
+
+* Each unit of income.group[50000,75000) is associated with approximately 8.5% lower odds of awareness;
+
+* Each unit of income.group[75000,100000) is associated with approximately 6.6% lower odds of awareness;
+
+* Each unit of income.group[100000,150000) is associated with approximately 5.5% higher odds of awareness;
+
+* Each unit of income.group[150000,250000] is associated with approximately 19.9% higher odds of awareness;
+
+* Each unit of regionNortheast is associated with approximately 64.1% lower odds of awareness;
+
+* Each unit of regionSouth is associated with approximately 14.4% higher odds of awareness;
+
+* Each unit of regionWest is associated with approximately 60.8% lower odds of awareness;
+
+* Each unit of personaConsistent Compromiser is associated with approximately 19.0% higher odds of awareness;
+
+* Each unit of personaMaterialistic Meditator is associated with approximately 28.1% higher odds of awareness;
+
+* Each unit of personaOutdoorsy Ombudsman is associated with approximately 22.1% higher odds of awareness;
+
+* Each unit of personaPrecociously Preoccupied is associated with approximately 23.3% higher odds of awareness;
+
+* Each unit of personaTechnological Triumphalist is associated with approximately 20.1% higher odds of awareness;
+
+* Each unit of Aggregated.Engagement is associated with approximately 42.9% lower odds of awareness;
+
+```{r aggregated_awareness_buzzdial_model}
+dat[Product!="Buzzdial", ':='(Aggregated.Engagement, mean(Awareness,na.rm=TRUE)),by=id]
+dat[,':='(Aggregated.Engagement,mean(Aggregated.Engagement,na.rm=TRUE)),by=id]
+datatable(awareness.model(dat = dat[Product=="Buzzdial",]))
+dat$Aggregated.Engagement <- NULL
+```
+
+**b.**  : For the impact on Brand **Buzzdial**'s Satisfaction:
+
+* Each unit of age.group[35,50) is associated with approximately 0.134 additional points of awareness;
+
+* Each unit of age.group[50,65) is associated with approximately 0.028 additional points of awareness;
+
+* Each unit of age.group[65,120] is associated with approximately -0.196 additional points of awareness;
+
+* Each unit of genderMale is associated with approximately 0.697 additional points of awareness;
+
+* Each unit of income.group[50000,75000) is associated with approximately -0.685 additional points of awareness;
+
+* Each unit of income.group[75000,100000) is associated with approximately -0.771 additional points of awareness;
+
+* Each unit of income.group[100000,150000) is associated with approximately -0.35 additional points of awareness;
+
+* Each unit of income.group[150000,250000] is associated with approximately -0.456 additional points of awareness;
+
+* Each unit of regionNortheast is associated with approximately -1.243 additional points of awareness;
+
+* Each unit of regionSouth is associated with approximately -0.083 additional points of awareness;
+
+* Each unit of regionWest is associated with approximately -0.806 additional points of awareness;
+
+* Each unit of personaConsistent Compromiser is associated with approximately -0.067 additional points of awareness;
+
+* Each unit of personaMaterialistic Meditator is associated with approximately -0.421 additional points of awareness;
+
+* Each unit of personaOutdoorsy Ombudsman is associated with approximately 0.012 additional points of awareness;
+
+* Each unit of personaPrecociously Preoccupied is associated with approximately -0.381 additional points of awareness;
+
+* Each unit of personaTechnological Triumphalist is associated with approximately 0.541 additional points of awareness;
+
+* Each unit of Aggregated.Engagement is associated with approximately 0.133 additional points of awareness;
+
+```{r aggregated_satisfaction_buzzdial_model}
+dat[Product!="Buzzdial", ':='(Aggregated.Engagement, mean(Satisfaction,na.rm=TRUE)),by=id]
+dat[,':='(Aggregated.Engagement,mean(Aggregated.Engagement,na.rm=TRUE)),by=id]
+datatable(satisfaction.model(dat = dat[Product=="Buzzdial",]))
+dat$Aggregated.Engagement <- NULL
+```
+
+**c.** Now we will create a dynamic model that allows the user to build a model including an aggregated outcome for a specific product.  The site should include the following features:
+
+* The user can select the product.
+
+* The user can select the state of engagement as the outcome.
+
+* The user can select the other variables to include in the model.  The list of choices should include the age group, gender, income group, region, persona, brand perceptions, and the Aggregated Engagement.  Each person's aggregated engagement will be calculated as the average score of the selected state of engagement across the measured values of the other products .  You can give this variable a name like "Aggregated.Engagement".
+
+The user's selections will then be incorporated into a model.  For Satisfaction outcomes, use a linear regression.  For all of the other outcomes, use a logistic regression.  Then create a dynamic table showing the model's results.  For logistic regressions, this must include the Odds Ratios, 95% confidence intervals for the Odds ratios, and the p-values.  For linear regressions, this must include the coeffiients, 95% confidence intervals for the coefficients, and the p-values.  Other factors may be included but are not necessary.  Round all of the results to 3 decimal places.
+
+```{r engine_q5, echo=FALSE}
+print("Please see the reporting engine for this solution.")
+```

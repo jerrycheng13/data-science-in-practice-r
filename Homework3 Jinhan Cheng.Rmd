@@ -1,0 +1,420 @@
+---
+title: "Homework3 Jinhan Cheng"
+author: "Jinhan Cheng, jc4834@columbia.edu"
+date: "10/24/2017"
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, eval = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+```
+```{r libraries,include=FALSE}
+library(prettydoc)
+library(data.table)
+library(plyr)
+library(dplyr)
+library(Hmisc)
+library(DT)
+library(scales)
+library(noncensus)
+```
+```{r read file,include=FALSE}
+dat <- fread(input="Homework 3 Data.csv")
+products <- fread(input = "Homework 3 -- products.csv")
+traits <- fread(input = "Homework 3 -- traits.csv")
+outcomes <- fread(input = "Homework 3 -- outcomes.csv")
+```
+## Answer to Question 1: Reading In the Data
+
+- a) There are 100000 respondents participated in the survey.
+
+```{r num_rows}
+dat[,.N]
+```
+
+- b) There are 19 columns of data are in the main file.
+
+```{r num_cols}
+ncol(dat)
+```
+
+- c) Show the list of the products and their identifying numbers.
+
+```{r show_products}
+datatable(products)
+```
+
+- d) Show the list of the traits and their identifying numbers.
+
+```{r show_traits}
+datatable(traits)
+```
+
+- e) Show the list of the outcomes and their identifying numbers.
+
+```{r show_outcomes}
+datatable(outcomes)
+```
+
+## Answer to Question 2: Meaningful Variable Names
+
+```{r change_names}
+trait.variables <- names(dat)[grep(pattern = "trait", x = names(dat))]
+change.trait.variable.name <- function(the.names, products, traits, prefix = "trait_") {
+  short.names <- gsub(pattern = prefix, replacement = "", x = the.names)
+  new.names <- character(length(short.names)) 
+  the.pieces <- strsplit(x = short.names, split = "_", fixed = TRUE)
+  for (i in 1:length(the.pieces)) {
+      the.product.number <- as.numeric(the.pieces[[i]][1]) 
+      the.product <- products[number == the.product.number, name]
+      the.trait.number <- as.numeric(the.pieces[[i]][2]) 
+      the.trait <- traits[number == the.trait.number, name]
+      new.names[i] <- sprintf("%s_%s", the.product, the.trait)
+  }
+  return(new.names) 
+}
+new.trait.names <- change.trait.variable.name(the.names = trait.variables, products = products, traits = traits)
+
+outcome.variables <- names(dat)[grep(pattern = "outcome", x = names(dat))]
+change.outcome.variable.name <- function(the.names, products, outcomes, prefix = "outcome_") {
+  short.names <- gsub(pattern = prefix, replacement = "", x = the.names)
+  new.names <- character(length(short.names)) 
+  the.pieces <- strsplit(x = short.names, split = "_", fixed = TRUE)
+  for (i in 1:length(the.pieces)) {
+      the.product.number <- as.numeric(the.pieces[[i]][1]) 
+      the.product <- products[number == the.product.number, name]
+      the.outcome.number <- as.numeric(the.pieces[[i]][2]) 
+      the.outcome <- outcomes[number == the.outcome.number, name]
+      new.names[i] <- sprintf("%s_%s", the.product, the.outcome)
+  }
+  return(new.names) 
+}
+new.outcome.names <- change.outcome.variable.name(the.names = outcome.variables, products = products, outcomes = outcomes)
+
+setnames(x = dat, old = trait.variables, new = new.trait.names)
+setnames(x = dat, old = outcome.variables, new = new.outcome.names)
+datatable(dat[1:2,])
+```
+
+## Answer to Question 3: Inspectation and Checking
+
+### Checking age: No need for cleaning.
+```{r check_age}
+str(dat$age)
+summary(dat$age)
+```
+
+### Checking state: No need for cleaning.
+```{r begin_check}
+str(dat$state)
+table(dat$state)
+```
+
+### Checking income: No need for cleaning.
+```{r income_check}
+str(dat$income)
+summary(dat$income)
+```
+
+### Checking sex: No need for cleaning.
+```{r check_sex}
+str(dat$sex)
+table(dat$sex)
+```
+
+### Checking the trait variables: Because all of the variables are numeric and there are no obvious solutions to deal with missing values, so we just leace them with "NA". We can also know that if the value of **awareness** is 0, then the following values of **advocacy**, **satisfaction**, **adventurous** and **luxurious** are all **NA** from the next checking step. 
+```{r check_traits}
+str(dat$Quinoa_Whoa_adventurous)
+str(dat$Quinoa_Whoa_luxurious)
+str(dat$`100_Buckwheat_adventurous`)
+str(dat$`100_Buckwheat_luxurious`)
+str(dat$Millet_Mullet_adventurous)
+str(dat$Millet_Mullet_luxurious)
+summary(dat$Quinoa_Whoa_adventurous)
+summary(dat$Quinoa_Whoa_luxurious)
+summary(dat$`100_Buckwheat_adventurous`)
+summary(dat$`100_Buckwheat_luxurious`)
+summary(dat$Millet_Mullet_adventurous)
+summary(dat$Millet_Mullet_luxurious)
+```
+
+### Checking the outcomes: Because all of the variables are numeric and there are no obvious solutions to deal with missing values, so we just leace them with "NA".
+```{r check_outcomes}
+str(dat$Quinoa_Whoa_awareness)
+str(dat$Quinoa_Whoa_advocacy)
+str(dat$Quinoa_Whoa_satisfaction)
+str(dat$`100_Buckwheat_awareness`)
+str(dat$`100_Buckwheat_advocacy`)
+str(dat$`100_Buckwheat_satisfaction`)
+str(dat$Millet_Mullet_awareness)
+str(dat$Millet_Mullet_advocacy)
+str(dat$Millet_Mullet_satisfaction)
+summary(dat$Quinoa_Whoa_awareness)
+summary(dat$Quinoa_Whoa_advocacy)
+summary(dat$Quinoa_Whoa_satisfaction)
+summary(dat$`100_Buckwheat_awareness`)
+summary(dat$`100_Buckwheat_advocacy`)
+summary(dat$`100_Buckwheat_satisfaction`)
+summary(dat$Millet_Mullet_awareness)
+summary(dat$Millet_Mullet_advocacy)
+summary(dat$Millet_Mullet_satisfaction)
+```
+
+## Answer to Question 4: Restructuring the Data
+* The results are as followed.
+```{r measure_vars}
+get.names <- function(pattern, x){
+  the.names <- x[grep(pattern = pattern, x = x)]
+  return(the.names)
+}
+product.attributes <- c(outcomes[, name], traits[, name])
+measure.vars <- c()
+for(i in 1:length(product.attributes)){
+  measure.vars[[i]] <- get.names(pattern = product.attributes[i], x = names(dat))
+}
+``` 
+```{r melted_data}
+dat[,id := 1:dat[,.N]]
+id.vars <-c("id","age","state","income","sex")
+rdat <- melt(data=dat, id.vars=id.vars, measure.vars=measure.vars, variable.name="product", value.name=c("awareness","advocacy","satisfaction","adventurous","luxurious"), value.factor=FALSE)
+prods <- c("Quinoa_Whoa","100_Buckwheat","Millet_Mullet")
+rdat[,`:=`(product, mapvalues(x=product, from=1:3, to=prods))]
+rdat[,product := as.character(product)]
+setorderv(x=rdat, cols=c("id","product"))
+datatable(rdat[1:12,])
+```
+
+## Answer to Question 5: Outcomes
+- a) We can look through the main data and know that the outcomes "awareness" and "advocacy" are binary, and the means are as followed:
+
+**100_Buckwheat**: the average for "**awareness**" is 75%, the average for "**advocacy**" is 84.3%, the average for "**satisfaction**" is 4, the average for "**adventurous**" is 4.7, the average for "**luxurious**" is 3;
+
+**Millet_Mullet**: the average for "**awareness**" is 19.8%, the average for "**advocacy**" is 73%, the average for "**satisfaction**" is 3.9, the average for "**adventurous**" is 2.6, the average for "**luxurious**" is 5;
+
+**Quinoa_Whoa**: the average for "**awareness**" is 48.6%, the average for "**advocacy**" is 33.5%, the average for "**satisfaction**" is 5.4, the average for "**adventurous**" is 5.2, the average for "**luxurious**" is 5.2;
+```{r round.numerics}
+round.numerics <- function(x) {
+    if (x<1){
+        return(percent(round(x = x, digits = 3)))
+    } else {
+        return(round(x = x, digits = 1)) 
+    }
+}
+```
+```{r round.numerics.mean}
+round.numerics.mean <- function(x) {
+    return(round.numerics(mean(x, na.rm=TRUE)))
+}
+```
+```{r outcomes_traits}
+outcomes_traits <- c("awareness", "advocacy","satisfaction","adventurous","luxurious")
+outcomes_traits_mean <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=product]
+datatable(outcomes_traits_mean)
+```
+
+- b) We use function "**cut2**" and "**mapvalues**" to create the age_group, income_group and region.
+
+```{r segmented_outcomes}
+rdat[,`:=`(age_group,cut2(x=age,cuts=c(18,35,50,65)))]
+rdat[,`:=`(income_group,cut2(x=income,cuts=c(0,50000,75000,100000,150000)))]
+data(states)
+states <- as.data.table(states)
+states[,region := as.character(region)]
+rdat[,`:=`(region,mapvalues(x=state, from=states$state, to=states$region))]
+```
+
+### By Age Group: The results are as shown in the data table.
+
+**100_Buckwheat**: the mean of "**awareness**" increases with age; the mean of "**advocacy**" first increases with age and then it decreases; the mean of "**satisfaction**" decreases with age; the mean of "**adventurous**" decreases with age; the mean of "**luxurious**" first decreases with age and then it increases.
+
+**Millet_Mullet**: the mean of "**awareness**" decreases with age; the mean of "**advocacy**" first decreases with age and then it increases, finally it decreases again; the mean of "**satisfaction**" first decreases with age and then it increases, finally it decreases again; the mean of "**adventurous**" decreases with age; the mean of "**luxurious**" decreases with age.
+
+**Quinoa_Whoa**: the mean of "**awareness**" decreases with age; the mean of "**advocacy**" first decreases with age and then it increases, finally it decreases; the mean of "**satisfaction**" first increases with age, and then it decreases; the mean of "**adventurous**" increases with age; the mean of "**luxurious**" increases with age.
+```{r outcomes_by_age.group}
+outcomes_traits <- c("awareness", "advocacy","satisfaction","adventurous","luxurious")
+outcomes_traits_mean_byage <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=c("product","age_group")]
+setorderv(x=outcomes_traits_mean_byage, cols=c("product","age_group"))
+datatable(outcomes_traits_mean_byage)
+```
+
+### By Sex: The results are as shown in the data table.
+
+**100_Buckwheat**: male has higher mean of "**awareness**" than female; male has higher mean of "**advocacy**" than female; male has higher mean of "**satisfaction**" than female; male has higher mean of "**adventurous**" than female; male has lower mean of "**luxurious**" than female.
+
+**Millet_Mullet**: male has higher mean of "**awareness**" than female; male has higher mean of "**advocacy**" than female; male has lower mean of "**satisfaction**" than female; male has lower mean of "**adventurous**" than female; male has lower mean of "**luxurious**" than female.
+
+**Quinoa_Whoa**: male has lower mean of "**awareness**" than female; male has lower mean of "**advocacy**" than female; male has lower mean of "**satisfaction**" than female; male has lower mean of "**adventurous**" than female; male has higher mean of "**luxurious**" than female.
+```{r outcomes_by_sex}
+outcomes_traits_mean_bysex <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=c("product","sex")]
+setorderv(x=outcomes_traits_mean_bysex, cols=c("product","sex"))
+datatable(outcomes_traits_mean_bysex)
+```
+
+### By Income Group: The results are as shown in the data table.
+
+**100_Buckwheat**: the mean of "**awareness**" first increases with income, and then it decreases; the mean of "**advocacy**" first decreases with income and then it increases, finally it decreases; the mean of "**satisfaction**" increases with income; the mean of "**adventurous**" increases with income, and then it keeps the same; the mean of "**luxurious**" decreases with income.
+
+**Millet_Mullet**: the mean of "**awareness**" first increases with income, and then it decreases; the mean of "**advocacy**" increases with income; the mean of "**satisfaction**" first increases with income and then it decreases, finally it increases again; the mean of "**adventurous**" first increases with income, and then it decreases; the mean of "**luxurious**" decreases with income.
+
+**Quinoa_Whoa**: the mean of "**awareness**" increases with income; the mean of "**advocacy**" first decreases with income and then it increases; the mean of "**satisfaction**" first decreases with income, and then it increases; the mean of "**adventurous**" first decreases with income, and then it keeps the same; the mean of "**luxurious**" first increases with income, and then it keeps the same.
+```{r outcomes_by_income.group}
+outcomes_traits_mean_byincome <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=c("product","income_group")]
+setorderv(x=outcomes_traits_mean_byincome, cols=c("product","income_group"))
+datatable(outcomes_traits_mean_byincome)
+```
+
+### By Region: We compare the means of each product from Midwest, Northeast, South to West, the results are as shown in the data table.
+
+**100_Buckwheat**: the West has the highest mean of "**awareness**" and the Midwest has the lowest; the Northeast has the highest mean of "**advocacy**" and the South has the lowest; the South has the highest mean of "**satisfaction**" and the West has the lowest; the South has the highest mean of "**adventurous**" and the Northeast has the lowest; the Northeast has the highest mean of "**luxurious**" and the West has the lowest.
+
+**Millet_Mullet**: the South has the highest mean of "**awareness**" and the Northeast has the lowest; the Northeast has the highest mean of "**advocacy**" and the Midwest has the lowest; the Northeast has the highest mean of "**satisfaction**" and the Midwest and the South has the lowest; the Northeast has the highest mean of "**adventurous**" and the South has the lowest; the Midwest has the highest mean of "**luxurious**" and the Northeast has the lowest.
+
+**Quinoa_Whoa**: the Northeast has the highest mean of "**awareness**" and the South has the lowest; the West has the highest mean of "**advocacy**" and the South has the lowest; the Northeast has the highest mean of "**satisfaction**" and the Midwest has the lowest; the Midwest has the highest mean of "**adventurous**" and the West has the lowest; the Northeast and the West has the highest mean of "**luxurious**" and the Midwest has the lowest.
+```{r outcomes_by_region}
+outcomes_traits_mean_byregion <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=c("product","region")]
+setorderv(x=outcomes_traits_mean_byregion, cols=c("product","region"))
+datatable(outcomes_traits_mean_byregion)
+```
+
+## Answer to Question 6: Aggregation of Products
+* We aggregate the products because all of them are similar, but there still exists differeces between them. For example, the ideal situation is that all of them has the same size but there exists missing value NA's within them, which would make the result less reliable. Also we know that different group has different influence to the result. But in general, it is an efficient and quick way.
+```{r aggregated_traits_and_outcomes}
+outcomes_traits_mean_aggregated <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits]
+datatable(outcomes_traits_mean_aggregated)
+```
+
+## Answer to Question 7: Aggregation and Segmentation
+### By Age Group
+* The mean of "**awareness**" decreases with age; the mean of "**advocacy**" first decreases with age, and then it increases, finally it decreases again; the mean of "**satisfaction**" decreases with age; the mean of "**adventurous**" first decreases with age, and then it increases; the mean of "**luxurious**" decreases with age. 
+```{r aggregation_segmentation_age_group}
+outcomes_traits_mean_aggregated_byage <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=age_group]
+setorderv(x=outcomes_traits_mean_aggregated_byage, cols=c("age_group"))
+datatable(outcomes_traits_mean_aggregated_byage)
+```
+
+### By Sex
+* Male has lower mean of "**awareness**" than female; male has higher mean of "**advocacy**" than female; male has higher mean of "**satisfaction**" than female; male has lower mean of "**adventurous**" than female; male has lower mean of "**luxurious**" than female. 
+```{r aggregatation_segmentation_by_sex}
+outcomes_traits_mean_aggregated_bysex <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=sex]
+setorderv(x=outcomes_traits_mean_aggregated_bysex, cols=c("sex"))
+datatable(outcomes_traits_mean_aggregated_bysex)
+```
+
+### By Income Group
+* The mean of "**awareness**" first increases with income, and then it decreases; the mean of "**advocacy**" first decreases with income, and then it increases, finally it decreases again; the mean of "**satisfaction**" increases with income; the mean of "**adventurous**" increases with income; the mean of "**luxurious**" first decreases with income, and then it increases. 
+```{r aggregatation_segmentation_by_income.group}
+outcomes_traits_mean_aggregated_byincome <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=income_group]
+setorderv(x=outcomes_traits_mean_aggregated_byincome, cols=c("income_group"))
+datatable(outcomes_traits_mean_aggregated_byincome)
+```
+
+### By Region
+* The Northeast has the higest mean of "**awareness**" and the Midwest has the lowest; the West has the highest mean of "**advocacy**" and the Midest has the lowest; the South has the highest mean of "**satisfaction**" and the Midwest has the lowest; the South has the highest mean of "**adventurous**" and the Northeast has the lowest; the Northest has the highest mean of "**luxurious**" and the West has the lowest. 
+```{r aggregatation_segmentation_by_region}
+outcomes_traits_mean_aggregated_byregion <- rdat[, lapply(X = .SD, FUN = "round.numerics.mean"), .SDcols =outcomes_traits, by=region]
+setorderv(x=outcomes_traits_mean_aggregated_byregion, cols=c("region"))
+datatable(outcomes_traits_mean_aggregated_byregion)
+```
+
+## Answer to Question 8: Modeling Awareness
+
+```{r awareness_logistic_regression}
+round.numer <- function(x, digits) { 
+  if (is.numeric(x)) {
+     x <- round(x = x, digits = digits)
+  }
+  return(x) 
+}
+logistic.regression.summary <- function(glm.mod, digits = 3) {
+  glm.coefs <- as.data.table(summary(glm.mod)$coefficients, keep.rownames = TRUE) 
+  alpha = 0.05
+  z <- qnorm(p = 1 - alpha/2, mean = 0, sd = 1)
+  glm.coefs[, `:=`(Odds.Ratio, exp(Estimate))]
+  glm.coefs[, `:=`(OR.Lower.95, exp(Estimate - z * `Std. Error`))] 
+  glm.coefs[, `:=`(OR.Upper.95, exp(Estimate + z * `Std. Error`))] 
+  setnames(x = glm.coefs, old = c("rn", "Pr(>|z|)"), new = c("Variable", 
+    "p.value"))
+  setcolorder(x = glm.coefs, neworder = c("Variable", "Estimate", 
+    "Odds.Ratio", "Std. Error", "z value", "OR.Lower.95", 
+    "OR.Upper.95", "p.value"))
+  return(glm.coefs[])
+}
+awareness.formula <- "awareness ~ age_group + region + income_group + sex + product"
+awareness_logistic <- logistic.regression.summary(glm(formula=awareness.formula, family="binomial",data=rdat))
+datatable(awareness_logistic[, lapply(X=.SD, FUN="round.numer",digits=3)])
+```
+
+* Each unit of age_group[35,50) is associated with approximately 12.8% lower odds of awareness;
+* Each unit of age_group[50,65) is associated with approximately 21.0% lower odds of awareness;
+* Each unit of age_group[65,95) is associated with approximately 34.4% lower odds of awareness;
+* Each unit of regionNortheast is associated with approximately 88.8% higher odds of awareness;
+* Each unit of regionSouth is associated with approximately 17.1% higher odds of awareness;
+* Each unit of regionWest is associated with approximately 87.7% higher odds of awareness;
+* Each unit of income_group[50000,75000) is associated with approximately 1.9% higher odds of awareness;
+* Each unit of income_group[75000,100000) is associated with approximately 3.8% higher odds of awareness;
+* Each unit of income_group[100000,150000) is associated with approximately 3.8% higher odds of awareness;
+* Each unit of income_group[150000,445000) is associated with approximately 3.9% lower odds of awareness;
+* Each unit of sexMale is associated with approximately 0.6% lower odds of awareness;
+* Each unit of productMillet_Mullet is associated with approximately 92.2% lower odds of awareness;
+* Each unit of productQuinoa_Whoa is associated with approximately 69.3% lower odds of awareness;
+```{r commentary_awareness_logistic_regression, echo=FALSE}
+
+```
+
+## Answer to Question 9: Modeling Satisfaction
+
+```{r satisfaction_linear_regression}
+linear.regression.summary <- function(lm.mod, digits = 3) { 
+  lm.coefs <- as.data.table(summary(lm.mod)$coefficients, keep.rownames = TRUE) 
+  alpha = 0.05
+  z <- qnorm(p = 1 - alpha/2, mean = 0, sd = 1)
+  lm.coefs[, `:=`(Coef.Lower.95, Estimate - z * `Std. Error`)] 
+  lm.coefs[, `:=`(Coef.Upper.95, Estimate + z * `Std. Error`)] 
+  setnames(x = lm.coefs, old = c("rn", "Pr(>|t|)"), new = c("Variable", 
+    "p.value"))
+  setcolorder(x = lm.coefs, neworder = c("Variable", "Estimate", "Std. Error", "t value", "Coef.Lower.95", 
+    "Coef.Upper.95", "p.value"))
+  return(lm.coefs)
+}
+satisfaction.formula <- "satisfaction ~ age_group + region + income_group + sex + adventurous + luxurious"
+satisfaction_linear_100_Buckwheat <- linear.regression.summary(lm(formula=satisfaction.formula, data=rdat[product=='100_Buckwheat',]))
+datatable(satisfaction_linear_100_Buckwheat[, lapply(X=.SD, FUN="round.numer",digits=3)])
+```
+
+* Each unit of age_group[35,50) is associated with approximately -0.27 additional points of satisfaction;
+* Each unit of age_group[50,65) is associated with approximately -0.60 additional points of satisfaction;
+* Each unit of age_group[65,95) is associated with approximately -1.31 additional points of satisfaction;
+* Each unit of regionNortheast is associated with approximately -0.44 additional points of satisfaction;
+* Each unit of regionSouth is associated with approximately 0.91 additional points of satisfaction;
+* Each unit of regionWest is associated with approximately -0.90 additional points of satisfaction;
+* Each unit of income_group[50000,75000) is associated with approximately -0.04 additional points of satisfaction;
+* Each unit of income_group[75000,100000) is associated with approximately 0.87 additional points of satisfaction;
+* Each unit of income_group[100000,150000) is associated with approximately 0.86 additional points of satisfaction;
+* Each unit of income_group[150000,445000) is associated with approximately 2.24 additional points of satisfaction;
+* Each unit of sexMale is associated with approximately 2.84 additional points of satisfaction;
+* Each unit of adventurous is associated with approximately 0.25 additional points of satisfaction;
+* Each unit of luxurious is associated with approximately 0.10 additional points of satisfaction;
+```{r commentary_satisfaction_results, echo=FALSE}
+
+```
+
+## Answer to Question 10: Awareness and Satisfaction
+
+* We know from the data structure that if the value of "**awareness**" is "**1**", then there will be follow-up questions including "**satisfaction**"; if the value of "**awareness**" is "**0**", then there will be no follow_up questions, that means the value for "**satisfaction**" is NA. And I believe "**awareness**" has no practical impact on "**satisfaction**", it only determine whether the value of "**satisfaction**" is NA or not. And it has the same result with the specific product "**100_Buckwheat**".
+
+* In order to further explain it, let go back to question 3, we will further check the structually missing values by awareness. 
+```{r awareness_and_satisfaction}
+mean.missing <- function(x) { 
+  return(mean(is.na(x)))
+}
+datatable(rdat[, lapply(X = .SD, FUN = "mean.missing")])
+datatable(round(x = rdat[, lapply(X = .SD, FUN = "mean.missing"), by = "awareness"], digits = 2))
+```
+
+* We could see that **satisfaction** is always missing when the value of **awareness** is **0**, this result matches the expected structure of the survey.
+
+* However, if we look back to question 8 and 9, considering all the variables, there would some interesting conclusion we could make. For question 8, we know the impact of each variable except the **traits** or **outcomes** do on the respondant's awareness, and for question 9, we know the impact of each variable do except **outcomes** on the respondant's satisfaction of product **100_Buckwheat**. In this way, **awareness** could serve as a medium to connect other variables to **satisfaction** though the values of **outcomes** are **NA** when the value of **awareness** equals to **0**.

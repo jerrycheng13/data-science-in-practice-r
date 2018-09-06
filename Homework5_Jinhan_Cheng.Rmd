@@ -1,0 +1,299 @@
+---
+title: "Homework 5"
+author: "Jinhan Cheng (jc4834@columbia.edu)"
+date: "Due: December 6th, 2017"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, eval = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+```
+
+
+```{r libraries, echo=FALSE, eval=TRUE}
+library(prettydoc)
+library(data.table)
+library(Hmisc)
+library(DT)
+library(lubridate)
+```
+
+```{r constants, echo=FALSE}
+
+```
+
+```{r my_functions, echo=FALSE}
+round.numerics <- function(x, digits, nearest = 1){
+  if(is.numeric(x)){
+    return(nearest * round(x = x/nearest, digits = digits))
+  }
+  else{
+    return(x)
+  }
+}
+
+percent <- function(x, digits, format = "f", ...){
+  paste(format(100 * x, format = format, digits = digits, ...), "%", sep = "")
+}
+
+```
+
+```{r read_data_intro, echo=FALSE, eval=TRUE}
+profiles <- fread(input = "../Data/Profiles.csv")
+connections <- fread(input = "../Data/Connections.csv")
+registrations <- fread(input = "../Data/Registrations.csv", colClasses = c("character", "POSIXct"), showProgress = FALSE)
+registrations[, registration.time := ymd_hms(registration.time)]
+
+num.lines <- 20
+question.counter = 0
+```
+
+```{r question1, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Classifying Connections
+
+* 48.8% of all connections are one-way connections;
+ 
+* 51.2% of all connections are two-way connections.
+
+```{r connection_directionality_percentages}
+connections[, ':='(AB, paste(id,connection_id,sep=""))]
+connections[, ':='(BA, paste(connection_id,id,sep=""))]
+oneway <- length(which(connections$AB %nin% connections$BA))
+twoway <- (length(connections$id)-oneway)/2
+oneway_percent <- percent(oneway/(oneway+twoway),3)
+twoway_percent <- percent(twoway/(oneway+twoway),3)
+oneway_percent
+twoway_percent
+```
+
+
+```{r question2, eval=TRUE, echo=FALSE}
+question.counter <- question.counter + 1
+
+selected.user <- 2000
+min.common.connections <- 30
+the.id <- profiles[selected.user, id]
+```
+
+## Answer to Question `r question.counter`: Recommending Connections
+
+* Here are the recommended connections:
+
+```{r recommendations}
+connected_CLKcSSSC <- connections[id=="CLKcSSSC",connection_id]
+recommendation <- connections[id != "CLKcSSSC" & connection_id %in% connected_CLKcSSSC,.(connection=length(connection_id)), by=id]
+recommendation <- recommendation[connection>=min.common.connections,]
+setorderv(x=recommendation,cols="connection",order=-1)
+datatable(recommendation)
+```
+
+
+```{r question3, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+
+min.connections <- 250
+min.photos <- 250
+min.connection.connections <- 250
+```
+
+## Answer to Question `r question.counter`:  Influential Connections
+
+There are 847 users who are connected to at least `r min.connections` users who satisfy all of the following criteria: 
+
+* Have at least `r min.photos` photos, and 
+* Have at least `r min.connection.connections` connections.
+
+```{r characteristics_of_connections}
+c_users <- connections[,.(connection=length(connection_id)),by=id]
+c_users <- c_users[connection>=min.connection.connections,id]
+p_users <- profiles[num_photos>=min.photos,id]
+cp_users <- c_users[which(p_users %in% c_users)]
+target_users <- connections[connection_id %in% cp_users,.(connection=length(connection_id)),by=id]
+n_target_users <- length(which(target_users$connection >= min.connections))
+n_target_users
+```
+
+
+```{r question4, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+
+x.per.day <- 5
+first.x.days <- 7
+```
+
+## Answer to Question `r question.counter`: Early Utilizers
+
+* 29.8% of all users logged in at least `r x.per.day * first.x.days` times during the first `r first.x.days`.
+
+```{r regular_users}
+registrations[,':=' (first7,first(registration.time)+days(7)),by=id]
+early.utilizer <- registrations[registration.time <= first7, .(login=length(registration.time)),by=id]
+n_early.utilizer <- length(which(early.utilizer$login >= x.per.day*first.x.days))
+p_early.utilizer <- percent(n_early.utilizer/length(unique(registrations$id)),3)
+p_early.utilizer
+```
+
+
+```{r question5, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+
+x.more <- 100
+```
+
+## Answer to Question `r question.counter`: Imbalanced Connections
+
+* 32.8% of users have at least `r x.more` more followers than the number of users that they are following.
+
+```{r imbalanced_connection_percentage}
+id.follow <- connections[,.(follow=length(connection_id)),by=id]
+id.followed <- connections[,.(followed=length(id)),by=connection_id]
+setnames(x=id.followed,old="connection_id",new="id")
+setorderv(id.follow,"id",1)
+setorderv(id.followed,"id",1)
+imbalanced.connections <- merge(id.follow,id.followed,by="id")
+percent(length(which(imbalanced.connections$followed-imbalanced.connections$follow>=x.more))/length(imbalanced.connections$id),3)
+
+```
+
+
+```{r question6, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Active Users
+
+* 8.62% of unique users in the sample were active (with at least 1 registration) between 00:00:00 of January 1st, 2017 and 23:59:59 on January 7th, 2017.
+
+```{r active_users}
+period.begin <- "2017-01-01"
+num.evaluation.days <- 7
+period.end <- as.Date(period.begin) + num.evaluation.days
+active.time <- registrations[as.Date(registration.time)>=period.begin & as.Date(registration.time)<=period.end,.(active=length(registration.time)),by=id]
+percent(length(active.time$id)/length(unique(registrations$id)),3)
+
+```
+
+
+```{r question7, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Burning the Midnight Oil
+
+* Across all days, 25% of all registrations occur between the hours of 00:00:00 and 05:59:59, inclusive of both endpoints.
+
+
+```{r midnight_oil}
+oil <- length(which(hour(registrations$registration.time)>=0 & hour(registrations$registration.time)<6))
+percent(oil/length(registrations$registration.time),3)
+```
+
+
+```{r question8, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Retention Rates
+
+* 30.2% of users were retained at 183 days (half a year) using a 7 day window to measure registrations.
+
+```{r retention_rate}
+six.months <- 183
+evaluation.window <- 7
+registrations[,':=' (windowbegin,first(registration.time)+days(six.months)),by=id]
+registrations[,':=' (windowend,first(registration.time)+days(six.months+evaluation.window)),by=id]
+retention <- registrations[registration.time>=windowbegin & registration.time<=windowend,.(retention=length(registration.time)),by=id]
+percent(length(retention$id)/length(unique(registrations$id)),3)
+
+```
+
+
+```{r question9, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  False Positive Rates
+
+* 0.04% percentage of users who were considered not retained at 6 months using a 7-day window later had a registration.
+
+```{r false_positive_rate}
+false_positive <- registrations[id %nin% retention$id & registration.time>windowend,.(positive=length(registration.time)),by=id]
+percent(length(false_positive$id)/(length(unique(registrations$id))-length(retention$id)),1)
+
+```
+
+
+```{r question10, echo=FALSE, eval=TRUE}
+question.counter <- question.counter + 1
+```
+
+## Answer to Question `r question.counter`:  Modeling Retention
+
+Build a logistic regression model for retention at 6 months.  Classify users as retained at 6 months if they have any account registrations at times at least 183 days after their account was created.  Include the following variables:
+  
+* density
+* age_group
+* gender
+* num_photos (categories:  0-24, 25-49, 50-99, 100-249, 250-499, 500+)  (current status)
+* average daily registrations in the first week.  (To simplify matters, let this be the total number of registrations in the first week divided by 7, regardless of whether the user's retention truly lasted 7 days or not.)
+* number of connections the user currently has
+* number of users currently connected to this user
+
+Display the odds ratios, confidence intervals for the odds ratios, and p-values for the coefficients, rounded to 3 digits.  Then briefly comment on the results.
+
+
+```{r model_functions}
+logistic.regression.summary <- function(glm.mod, digits = 3) {
+  glm.coefs <- as.data.table(summary(glm.mod)$coefficients, keep.rownames = TRUE) 
+  alpha = 0.05
+  z <- qnorm(p = 1 - alpha/2, mean = 0, sd = 1)
+  glm.coefs[, `:=`(Odds.Ratio, exp(Estimate))]
+  glm.coefs[, `:=`(OR.Lower.95, exp(Estimate - z * `Std. Error`))] 
+  glm.coefs[, `:=`(OR.Upper.95, exp(Estimate + z * `Std. Error`))] 
+  setnames(x = glm.coefs, old = c("rn", "Pr(>|z|)"), new = c("Variable", 
+    "p.value"))
+  setcolorder(x = glm.coefs, neworder = c("Variable", "Estimate", 
+    "Odds.Ratio", "OR.Lower.95", 
+    "OR.Upper.95", "p.value", "Std. Error", "z value"))
+  return(glm.coefs[])
+}
+```
+```{r retention_model}
+profiles[,`:=`(num.photos,cut2(x=num_photos,cuts=c(0,25,50,100,250,500)))]
+setorderv(profiles,"id",1)
+registrations[registration.time>=windowbegin,':='(retention,1L),by=id]
+n.retention <- registrations[,.(retention=mean(retention,na.rm=TRUE)),by=id]
+n.retention$retention[is.na(n.retention$retention)==TRUE] <- 0
+setorderv(n.retention,"id",1)
+average_daily_r <- registrations[registration.time<=first7,.(average.daily.registrations.first.week=length(registration.time)/7),by=id]
+setorderv(average_daily_r,"id",1)
+f.retention <- merge(merge(profiles,average_daily_r,by="id"),merge(n.retention,imbalanced.connections,by="id"))
+retention.formula <- "retention ~ density + age_group + gender + num.photos + average.daily.registrations.first.week + follow + followed"
+retention_logistic <- logistic.regression.summary(glm(formula=retention.formula, family="binomial",data=f.retention))
+datatable(retention_logistic[, lapply(X=.SD, FUN="round.numerics",digits=3)])
+```
+
+* As is shown in the result:
+* Each unit of densitySuburban is associated with approximately 44.9% lower odds of retention;
+* Each unit of densityUrban is associated with approximately 72.8% lower odds of retention;
+* Each unit of age_group25-34 is associated with approximately 13.6% lower odds of retention;
+* Each unit of age_group35-44 is associated with approximately 30.8% lower odds of retention;
+* Each unit of age_group45-54 is associated with approximately 53.5% lower odds of retention;
+* Each unit of age_group55-64 is associated with approximately 69.6% lower odds of retention;
+* Each unit of age_group65+ is associated with approximately 37.2% lower odds of retention;
+* Each unit of genderM is associated with approximately 28.4% lower odds of retention;
+* Each unit of num.photos[25,50) is associated with approximately 2.2% lower odds of retention;
+* Each unit of num.photos[50,100) is associated with approximately 1.9% higher odds of retention;
+* Each unit of num.photos[100,250) is associated with approximately 16.3% higher odds of retention;
+* Each unit of num.photos[250,500) is associated with approximately 3.1% higher odds of retention;
+* Each unit of num.photos[500,1500] is associated with approximately 0.7% higher odds of retention;
+* Each unit of average.daily.registrations.first.week is associated with approximately 127.6% lower odds of retention;
+* Each unit of follow is associated with approximately 0.4% higher odds of retention;
+* Each unit of followed has approximately no effect on retention.

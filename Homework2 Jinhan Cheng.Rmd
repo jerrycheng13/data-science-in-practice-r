@@ -1,0 +1,204 @@
+---
+title: "Homework2 Jinhan Cheng"
+author: "Jinhan Cheng, jc4834@columbia.edu"
+date: "October 13th, 2017"
+output: 
+    prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, eval = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+```
+```{r libraries,include=FALSE}
+library(prettydoc)
+library(data.table)
+library(plyr)
+library(dplyr)
+library(Hmisc)
+library(DT)
+library(scales)
+```
+```{r read file,include=FALSE}
+dat <- fread(input="Homework 2 Data -- 2017.csv")
+```
+
+## Answers to Question 1: Number of Medicines
+* We could see from the result and get the conclusion that the average percentage that the patient is taking at least 2 medicines at once is 80.85%, and there are 276 NAs, we check the length of each medicine and found out that there are 276 missing from Statin, and the results matched.
+* There is no obvious solution to this missing data issue, so we just regard them as NA.
+```{r check_type}
+str(dat)
+```
+```{r rowSums}
+dat[,rowSums_m := rowSums(dat[,c('ace','beta.blocker','statin')])]
+dat$rowSums_m[dat$rowSums_m<2] <- 0
+dat$rowSums_m[dat$rowSums_m>=2] <- 1
+rowSums_m_per <- dat[,sum((end-begin)*rowSums_m)/sum(end-begin), by=id]
+summary(rowSums_m_per)
+dat[,describe(ace)]
+dat[,describe(beta.blocker)]
+dat[,describe(statin)]
+```
+
+## Answers to Question 2: Hospitalization Stays
+* The minimum, average, median, maximum, and standard deviation of the length of a trip to the hospital are 1.0, 6.7, 2106.0, 24.1, these numbers have a very large range, which doesn't make sense intuitively. 
+```{r length_of_stay}
+dat[,hospital_per_t := dat[,(end-begin)*hospital]]
+for (i in 1:(length(dat$id-1)))
+  {if(dat$hospital[i]==1 & dat$hospital[i+1]==1 & dat$id[i]==dat$id[i+1])
+        {dat$hospital_per_t[i+1] <- dat$hospital_per_t[i+1]+dat$hospital_per_t[i]
+      dat$hospital_per_t[i] <- 0}
+}
+round(dat[hospital_per_t > 0,summary(hospital_per_t)],digits=1)
+round(dat[hospital_per_t > 0,sd(hospital_per_t)],digits=1)
+```
+
+## Answers to Question 3: Initiating Medicines
+* The percentages of the patients started each medicine (ACE inhibitors, Beta Blockers, and Statins) within 14 days of diagnosis are 97%, 93.6%, 97.9%.
+```{r initiation}
+ace_patient <- unique(dat$id[which(dat$ace==1 & dat$begin < 14)])
+beta_patient <- unique(dat$id[which(dat$beta.blocker==1 & dat$begin < 14)])
+statin_patient <- unique(dat$id[which(dat$statin==1 & dat$begin < 14)])
+ace_patient_per <- percent(round(length(ace_patient)/length(unique(dat$id)),digits=3))
+beta_patient_per <- percent(round(length(beta_patient)/length(unique(dat$id)),digits=3))
+statin_patient_per <- percent(round(length(statin_patient)/length(unique(dat$id)),digits=3))
+datatable(data.frame(ace_patient_per,beta_patient_per,statin_patient_per))
+```
+
+## Answers to Question 4: 5 Year Outcomes
+* (a)3133 patients had a heart attack within 5 years of baseline;
+* (b)5943 patients died within 5 years of baseline.
+```{r outcomes_1_yr}
+outcomes <- c("heart.attack", "death")
+one.year <- 365.25
+time.frame <- 5 * one.year
+h_a_d_t <- dat[end <= time.frame, lapply(X = .SD, FUN = "sum", na.rm = TRUE), .SDcols =outcomes, by=id]
+length(which(h_a_d_t$heart.attack > 0))
+length(which(h_a_d_t$death==1))
+```
+
+## Answers to Question 5: Modeling 5-Year Survival
+* Step 1,2,3
+```{r create_analysis_cohort}
+age_diseases <- c("age","diabetes","hypertension","kidney_disease")
+d_age_diseases <- dat[begin==0, lapply(X = .SD, FUN = "sum", na.rm = TRUE), .SDcols =age_diseases, by=id]
+medicines <- c("ace","beta.blocker","statin")
+d_medicines <- dat[begin<14, lapply(X = .SD, FUN = "sum", na.rm = TRUE), .SDcols =medicines, by=id]
+death <- c("death")
+d_death <- dat[end <= time.frame, lapply(X = .SD, FUN = "sum", na.rm = TRUE), .SDcols =death, by=id]
+d_analysis <- cbind(d_age_diseases,d_medicines,d_death)
+d_analysis <- d_analysis[,-6]
+d_analysis <- d_analysis[,-9]
+d_analysis$ace[d_analysis$ace>1] <- 1
+d_analysis$beta.blocker[d_analysis$beta.blocker>1] <- 1
+d_analysis$statin[d_analysis$statin>1] <- 1
+```
+* Step 4,5
+```{r logistic_model}
+the.formula <- "death ~ age + diabetes + hypertension + kidney_disease + ace + beta.blocker + statin"
+mod <- glm(formula=the.formula, family=binomial, data=d_analysis)
+round.numerics <- function(x, digits) {
+    if (is.numeric(x) == TRUE) {
+        return(round(x = x, digits = digits))
+    } else {
+return(x) }
+}
+glm.coefs <- as.data.table(summary(mod)$coefficients, keep.rownames = TRUE)
+datatable(data = glm.coefs[, lapply(X = .SD, FUN = "round.numerics", digits = 3)])
+```
+* Step 6
+```{r odds_ratios}
+glm.coefs[, `:=`(Odds.Ratio, exp(Estimate))]
+datatable(data = glm.coefs[, lapply(X = .SD, FUN = "round.numerics", digits = 3)])
+```
+* Step 7, we know that 95% confidence interval = effect size ± 1.96 × standard error of the effect size, and the result is:
+```{r model_results}
+alpha = 0.05
+z <- qnorm(p = 1-alpha/2, mean = 0, sd = 1)
+glm.coefs[, `:=`(OR.Lower.95, exp(Estimate - z * `Std. Error`))]
+glm.coefs[, `:=`(OR.Upper.95, exp(Estimate + z * `Std. Error`))]
+datatable(data = glm.coefs[, lapply(X = .SD, FUN = "round.numerics", digits = 3)])
+```
+* Step 8,9: The results are above, we can conclude that:
+each unit of age, diabetes, hypertension, kidney_disease, ace, beta.blocker, statin **are** associated with approximately -29.9%, 1.1%, 39.2%, 14.4%, 28.9%, -16.5%, 3.3%, 2.6% higher odds of death. And for ace, beta.blocker and statin, they have comparatively larger P value, it means more consideration are needed.
+
+## Answers to Question 6: Identifying a Cohort
+* First we need to check if there is any missing value. By using summary(dat) we can see that for the original data, only statin has NAs, so we shall not use data from them.
+* There are 4993 patients meet the criteria
+```{r identify_cohort}
+summary(dat)
+id_na <- unique(dat$id[which(is.na(dat$statin)==T)])
+id_w_na <- unique(dat$id[which(!(dat$id %in% id_na))])
+cohort_t <- unique(dat$id[which(dat$age>=65 & dat$end >= 365.25)])
+cohort <- unique(dat$id[which(dat$id %in% id_w_na & dat$id %in% cohort_t)])
+length(cohort)
+```
+
+## Answers to Question 7: Medication Adherence
+* The average adherence for the three medicines are 74.6%, 61.3%, and 80% 
+```{r adherence}
+ad_ace <- dat[end <= 365.25 & id %in% cohort,sum((end-begin)*ace)/sum(end-begin),by=id]
+ad_beta <- dat[end <= 365.25 & id %in% cohort,sum((end-begin)*beta.blocker)/sum(end-begin),by=id]
+ad_statin <- dat[end <= 365.25 & id %in% cohort,sum((end-begin)*statin)/sum(end-begin),by=id]
+percent(round(mean(ad_ace$V1),digits=3))
+percent(round(mean(ad_beta$V1),digits=3))
+percent(round(mean(ad_statin$V1),digits=3))
+```
+
+## Answers to Question 8: Costs
+* We can easily compute that the daily costs of ACEs, Beta Blockers, Statins to be 80/(365.25/12), 200/(365.25/12), 120/(365.25/12) dollars
+* The minimum, 25th pencentile, average, median, 75th pencentile, maximum value of the costs are:
+346.9, 5874.8, 18453.6, 23057.3, 31017.7, 626642.7
+```{r treatment.costs}
+ace.cost <- 80/(365.25/12)
+beta.blocker.cost <- 200/(365.25/12)
+statin.cost <- 120/(365.25/12)
+hospitalization.cost <- 2500
+heart.attack.cost <- 15000
+```
+```{r costs.by.patient}
+dat[,diff_heart_attack := diff(dat[,heart.attack])]
+dat$diff_heart_attack[dat$diff_heart_attack<0] <- 0
+cost <- dat[id %in% cohort & end<=365.25, sum((end-begin)*(ace.cost*ace+beta.blocker.cost*beta.blocker+statin.cost*statin+hospitalization.cost*hospital))+sum(heart.attack.cost*diff_heart_attack),by=id]
+summary(cost)
+```
+
+## Answers to Question 9: Cost Ranges
+* By looking at lower and upper, we know that the 95% confidence interval is [22400,23700]
+```{r normal.ci}
+lower <- mean(cost$V1)-1.96*sd(cost$V1)/sqrt(cost[,.N])
+upper <- mean(cost$V1)+1.96*sd(cost$V1)/sqrt(cost[,.N])
+lower
+upper
+```
+* The lower bound is 45737 and the higher bound is 48337, and we round them to 95% confidence interval [45737,48337], the result is strange because it is different from what we may think of it by considering the result from the summary.
+```{r bootstrap.ci}
+B <- 10000
+compute.percentile <- function(x, percentile = 90) { y <- sort(x = x, decreasing = FALSE)
+y <- y[!is.na(y)]
+n <- length(y)
+the.index <- floor(n * (percentile/100))
+return(y[the.index]) }
+n <- cost[, .N] 
+bootstrapped.percentiles <- numeric(B) 
+for (b in 1:B) {
+    bootstrapped.x <- sample(x = cost$V1, size = n, replace = TRUE)
+    bootstrapped.percentiles[b] <- compute.percentile(x = bootstrapped.x, percentile = 90)
+}
+lower <- compute.percentile(x = bootstrapped.percentiles, percentile = 2.5)
+upper <- compute.percentile(x = bootstrapped.percentiles, percentile = 97.5)
+print(round(x = data.table(lower, upper), digits = 0))
+```
+
+## Answers to Question 10: Super Utilizers
+* The percentage is 2.2% (2.15%)
+* The average time is 61.8
+```{r super_utilizers}
+cost.threshold <- 100000
+super_utilizers <- cost$id[which(cost$V1 >= cost.threshold)]
+percent(round(length(super_utilizers)/length(cost),digits=1))
+day_in_hos <- dat[end<=365.25 & id %in% super_utilizers,sum((end-begin)*hospital),by=id]
+round(mean(day_in_hos$V1),digits=1)
+```
